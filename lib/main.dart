@@ -1,129 +1,157 @@
-import 'package:eficiencias_ia/widgets/Scanner/QRCodeScanner.dart';
+import 'dart:typed_data';
+
+import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'dart:io';
 
-void main() {
-  runApp(MaterialApp(
-    home: ContinuousQRScanner(),
-  ));
+class QRCodeScanner extends StatefulWidget {
+  @override
+  _QRCodeScannerState createState() => _QRCodeScannerState();
 }
 
+class _QRCodeScannerState extends State<QRCodeScanner> {
+  late CameraController _cameraController;
+  late BarcodeScanner _barcodeScanner;
+  bool _isDetecting = false;
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+  void initState() {
+    super.initState();
+    _initializeCamera();
+    _barcodeScanner = BarcodeScanner();
+  }
+
+  Future<void> _initializeCamera() async {
+    final cameras = await availableCameras();
+    final camera = cameras.first;
+
+    _cameraController = CameraController(
+      camera,
+      ResolutionPreset.medium, // Puedes ajustar la resolución para optimizar
+      enableAudio: false,
     );
+
+    await _cameraController.initialize();
+    _cameraController.startImageStream((CameraImage image) {
+      if (!_isDetecting) {
+        _isDetecting = true;
+        _processCameraImage(image);
+      }
+    });
+
+    setState(() {});
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  Future<void> _processCameraImage(CameraImage image) async {
+    final WriteBuffer allBytes = WriteBuffer();
+    for (Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
+    }
+    final bytes = allBytes.done().buffer.asUint8List();
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+    final Size imageSize =
+        Size(image.width.toDouble(), image.height.toDouble());
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+    final camera = _cameraController.description;
+    final imageRotation = InputImageRotationValue.fromRawValue(
+      camera.sensorOrientation,
+    );
 
-  final String title;
+    final inputImageData = InputImageData(
+      size: imageSize,
+      imageRotation: imageRotation!,
+      inputImageFormat:
+          InputImageFormatValue.fromRawValue(image.format.raw) ?? 
+          InputImageFormat.nv21,
+      planeData: image.planes.map(
+        (Plane plane) {
+          return InputImagePlaneMetadata(
+            bytesPerRow: plane.bytesPerRow,
+            height: plane.height,
+            width: plane.width,
+          );
+        },
+      ).toList(),
+    );
+
+    final inputImage = InputImage.fromBytes(
+      bytes: bytes,
+      inputImageData: inputImageData,
+    );
+
+    try {
+      final List<Barcode> barcodes =
+          await _barcodeScanner.processImage(inputImage);
+
+      for (Barcode barcode in barcodes) {
+        print('Código QR detectado: ${barcode.displayValue}');
+      }
+
+      // Guardar el frame capturado
+      await _saveImage(bytes, image.width, image.height);
+    } catch (e) {
+      print('Error procesando la imagen: $e');
+    } finally {
+      _isDetecting = false;
+    }
+  }
+
+  Future<void> _saveImage(
+      Uint8List bytes, int width, int height) async {
+    try {
+      final directory = await getExternalStorageDirectory();
+      final downloadDir = Directory('${directory!.parent.parent.parent.parent.path}/Download/MyQRCodeScans');
+
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath = path.join(downloadDir.path, 'frame_$timestamp.png');
+
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      print('Imagen guardada en $filePath');
+    } catch (e) {
+      print('Error guardando la imagen: $e');
+    }
+  }
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  void dispose() {
+    _cameraController.dispose();
+    _barcodeScanner.close();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    if (!_cameraController.value.isInitialized) {
+      return Center(child: CircularProgressIndicator());
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      body: Stack(
+        children: [
+          CameraPreview(_cameraController),
+          Positioned(
+            bottom: 16,
+            left: 16,
+            child: Text(
+              'Escaneando...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+              ),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
