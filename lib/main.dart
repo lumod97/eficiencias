@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:image/image.dart' as img;
 
-
 void main() async {
   // Asegúrate de que la inicialización de Flutter se complete antes de ejecutar cualquier código.
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,165 +66,99 @@ class _QRCodeScannerState extends State<QRCodeScanner> {
     );
 
     await _cameraController.initialize();
-    _cameraController.startImageStream((CameraImage image) {
+    _cameraController.startImageStream((CameraImage image) async{
       if (!_isDetecting) {
         _isDetecting = true;
-        _processCameraImage(image);
+        await _processCameraImage(image);
       }
     });
 
     setState(() {});
   }
 
-  // Future<void> _processCameraImage(CameraImage image) async {
-  //   final WriteBuffer allBytes = WriteBuffer();
-  //   for (Plane plane in image.planes) {
-  //     allBytes.putUint8List(plane.bytes);
-  //   }
-  //   final bytes = allBytes.done().buffer.asUint8List();
-
-  //   final Size imageSize =
-  //       Size(image.width.toDouble(), image.height.toDouble());
-
-  //   final camera = _cameraController.description;
-  //   final imageRotation = InputImageRotationValue.fromRawValue(
-  //     camera.sensorOrientation,
-  //   );
-
-  //   final inputImageData = InputImageData(
-  //     size: imageSize,
-  //     imageRotation: imageRotation!,
-  //     inputImageFormat:
-  //         InputImageFormatValue.fromRawValue(image.format.raw) ?? 
-  //         InputImageFormat.nv21,
-  //     planeData: image.planes.map(
-  //       (Plane plane) {
-  //         return InputImagePlaneMetadata(
-  //           bytesPerRow: plane.bytesPerRow,
-  //           height: plane.height,
-  //           width: plane.width,
-  //         );
-  //       },
-  //     ).toList(),
-  //   );
-
-  //   final inputImage = InputImage.fromBytes(
-  //     bytes: bytes,
-  //     inputImageData: inputImageData,
-  //   );
-
-  //   try {
-  //     final List<Barcode> barcodes =
-  //         await _barcodeScanner.processImage(inputImage);
-
-  //     for (Barcode barcode in barcodes) {
-  //     // Guardar el frame capturado
-  //       await _saveImage(bytes, image.width, image.height, barcode.displayValue);
-  //       print('Código QR detectado: ${barcode.displayValue}');
-  //     }
-
-  //   } catch (e) {
-  //     print('Error procesando la imagen: $e');
-  //   } finally {
-  //     _isDetecting = false;
-  //   }
-  // }
-
   Future<void> _processCameraImage(CameraImage image) async {
-  final WriteBuffer allBytes = WriteBuffer();
-  for (Plane plane in image.planes) {
-    allBytes.putUint8List(plane.bytes);
-  }
-  final bytes = allBytes.done().buffer.asUint8List();
-
-  final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
-
-  final camera = _cameraController.description;
-  final imageRotation = InputImageRotationValue.fromRawValue(
-    camera.sensorOrientation,
-  );
-
-  final inputImageData = InputImageData(
-    size: imageSize,
-    imageRotation: imageRotation!,
-    inputImageFormat: InputImageFormatValue.fromRawValue(image.format.raw) ??
-        InputImageFormat.nv21,
-    planeData: image.planes.map(
-      (Plane plane) {
-        return InputImagePlaneMetadata(
-          bytesPerRow: plane.bytesPerRow,
-          height: plane.height,
-          width: plane.width,
-        );
-      },
-    ).toList(),
-  );
-
-  final inputImage = InputImage.fromBytes(
-    bytes: bytes,
-    inputImageData: inputImageData,
-  );
-
-  try {
-    final List<Barcode> barcodes = await _barcodeScanner.processImage(inputImage);
-
-    for (Barcode barcode in barcodes) {
-      // Guardar el frame capturado
-      await _saveImage(bytes, image.width, image.height, barcode.displayValue);
-      print('Código QR detectado: ${barcode.displayValue}');
+    final WriteBuffer allBytes = WriteBuffer();
+    for (Plane plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
     }
+    final bytes = allBytes.done().buffer.asUint8List();
 
-  } catch (e) {
-    print('Error procesando la imagen: $e');
-  } finally {
-    _isDetecting = false;
-  }
-}
+    final Size imageSize = Size(image.width.toDouble(), image.height.toDouble());
 
-  // Future<void> _saveImage(Uint8List bytes, int width, int height, String? valor) async {
-  //   try {
-  //     final directory = await getExternalStorageDirectory();
-  //     final downloadDir = Directory('${directory!.parent.parent.parent.parent.path}/Download/MyQRCodeScans');
+    final camera = _cameraController.description;
+    final imageRotation = InputImageRotationValue.fromRawValue(
+      camera.sensorOrientation,
+    );
 
-  //     if (!await downloadDir.exists()) {
-  //       await downloadDir.create(recursive: true);
-  //     }
+    final inputImageData = InputImageData(
+      size: imageSize,
+      imageRotation: imageRotation!,
+      inputImageFormat: InputImageFormatValue.fromRawValue(image.format.raw) ??
+          InputImageFormat.nv21,
+      planeData: image.planes.map(
+        (Plane plane) {
+          return InputImagePlaneMetadata(
+            bytesPerRow: plane.bytesPerRow,
+            height: plane.height,
+            width: plane.width,
+          );
+        },
+      ).toList(),
+    );
 
-  //     // final timestamp = DateTime.now().millisecondsSinceEpoch;
-  //     final filePath = path.join(downloadDir.path, '$valor.png');
-  //     // final filePath = path.join(downloadDir.path, 'frame_$timestamp.png');
+    final inputImage = InputImage.fromBytes(
+      bytes: bytes,
+      inputImageData: inputImageData,
+    );
 
-  //     final file = File(filePath);
-  //     await file.writeAsBytes(bytes);
+    try {
+      final List<Barcode> barcodes = await _barcodeScanner.processImage(inputImage);
 
-  //     print('Imagen guardada en $filePath');
-  //   } catch (e) {
-  //     print('Error guardando la imagen: $e');
-  //   }
-  // }
+      for (Barcode barcode in barcodes) {
+        // Guardar el frame capturado
+        await _saveImage(image, barcode.displayValue);
+        print('Código QR detectado: ${barcode.displayValue}');
+      }
 
-  Future<void> _saveImage(Uint8List bytes, int width, int height, String? valor) async {
-  try {
-    final directory = await getExternalStorageDirectory();
-    final downloadDir = Directory('${directory!.parent.parent.parent.parent.path}/Download/MyQRCodeScans');
-
-    if (!await downloadDir.exists()) {
-      await downloadDir.create(recursive: true);
+    } catch (e) {
+      print('Error procesando la imagen: $e');
+    } finally {
+      _isDetecting = false;
     }
-
-    // Convierte los bytes de la imagen cruda en una imagen PNG
-    final imgImage = img.Image.fromBytes(width, height, bytes);
-    final pngBytes = img.encodePng(imgImage);
-
-    final filePath = path.join(downloadDir.path, '$valor.png');
-    final file = File(filePath);
-    await file.writeAsBytes(pngBytes!);
-
-    print('Imagen guardada en $filePath');
-  } catch (e) {
-    print('Error guardando la imagen: $e');
   }
-}
+
+  Future<void> _saveImage(CameraImage image, String? valor) async {
+    try {
+      final directory = await getExternalStorageDirectory();
+      final downloadDir = Directory('${directory!.parent.parent.parent.parent.path}/Download/MyQRCodeScans');
+
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+
+      // Convierte los bytes de la imagen cruda en un formato manejable (RGB)
+      img.Image imgImage = img.Image.fromBytes(
+        image.width,
+        image.height,
+        image.planes[0].bytes,
+        format: img.Format.bgra,
+      );
+
+      // Gira la imagen según la orientación de la cámara si es necesario
+      imgImage = img.copyRotate(imgImage, -90); // Rotar según la orientación
+
+      // Codifica la imagen como PNG
+      final pngBytes = img.encodePng(imgImage);
+
+      final filePath = path.join(downloadDir.path, '$valor.png');
+      final file = File(filePath);
+      await file.writeAsBytes(pngBytes);
+
+      print('Imagen guardada en $filePath');
+    } catch (e) {
+      print('Error guardando la imagen: $e');
+    }
+  }
 
   @override
   void dispose() {
